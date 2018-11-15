@@ -62,6 +62,7 @@ bool g_null_div_by_zero{false};
 unsigned g_trivial_loop_join_threshold{1000};
 bool g_left_deep_join_optimization{true};
 bool g_from_table_reordering{true};
+bool g_enable_streaming{false};
 
 Executor::Executor(const int db_id,
                    const size_t block_size_x,
@@ -1626,6 +1627,108 @@ Executor::FetchResult Executor::fetchChunks(const ExecutionDispatch& execution_d
       ra_exe_unit, frag_ids_crossjoin, ra_exe_unit.input_descs, all_tables_fragments, isOuterLoopJoin());
   return {all_frag_col_buffers, all_frag_iter_buffers, all_num_rows, all_frag_offsets};
 }
+
+
+
+Executor::FetchResult Executor::fetchChunksWithStream(const ExecutionDispatch& execution_dispatch,
+                                                    const RelAlgExecutionUnit& ra_exe_unit,
+                                                    const int device_id,
+                                                    const Data_Namespace::MemoryLevel memory_level,
+                                                    const std::map<int, const TableFragments*>& all_tables_fragments,
+                                                    const std::vector<std::pair<int, std::vector<size_t>>>& selected_fragments,
+                                                    const Catalog_Namespace::Catalog& cat,
+                                                    std::list<ChunkIter>& chunk_iterators,
+                                                    std::list<std::shared_ptr<Chunk_NS::Chunk>>& chunks) {
+    const auto& col_global_ids = ra_exe_unit.input_col_descs;
+    std::vector<std::vector<size_t>> selected_fragments_crossjoin;
+    std::vector<size_t> local_col_to_frag_pos;
+    buildSelectedFragsMapping(
+            selected_fragments_crossjoin, local_col_to_frag_pos, col_global_ids, selected_fragments, ra_exe_unit);
+
+    CartesianProduct<std::vector<std::vector<size_t>>> frag_ids_crossjoin(selected_fragments_crossjoin);
+
+    std::vector<std::vector<const int8_t*>> all_frag_col_buffers;
+    std::vector<std::vector<const int8_t*>> all_frag_iter_buffers;
+    std::vector<std::vector<int64_t>> all_num_rows;
+    std::vector<std::vector<uint64_t>> all_frag_offsets;
+    const auto extra_tab_id_to_frag_offsets =
+            get_table_id_to_frag_offsets(ra_exe_unit.extra_input_descs, all_tables_fragments);
+    const bool needs_fetch_iterators =
+            ra_exe_unit.join_dimensions.size() > 2 && dynamic_cast<Analyzer::IterExpr*>(ra_exe_unit.target_exprs.front());
+
+    for (const auto& selected_frag_ids : frag_ids_crossjoin) {
+        std::vector<const int8_t*> frag_col_buffers(plan_state_->global_to_local_col_ids_.size());
+        for (const auto& col_id : col_global_ids) {
+            CHECK(col_id);
+            const int table_id = col_id->getScanDesc().getTableId();
+            const auto cd = try_get_column_descriptor(col_id.get(), cat);
+            bool is_rowid = false;
+            if (cd && cd->isVirtualCol) {
+                CHECK_EQ("rowid", cd->columnName);
+                is_rowid = true;
+                if (!std::dynamic_pointer_cast<const IndirectInputColDescriptor>(col_id)) {
+                    continue;
+                }
+            }
+            const auto fragments_it = all_tables_fragments.find(table_id);
+            CHECK(fragments_it != all_tables_fragments.end());
+            const auto fragments = fragments_it->second;
+            auto it = plan_state_->global_to_local_col_ids_.find(*col_id);
+            CHECK(it != plan_state_->global_to_local_col_ids_.end());
+            CHECK_LT(static_cast<size_t>(it->second), plan_state_->global_to_local_col_ids_.size());
+            const size_t frag_id = selected_frag_ids[local_col_to_frag_pos[it->second]];
+            if (!fragments->size()) {
+                return {};
+            }
+            CHECK_LT(frag_id, fragments->size());
+            auto memory_level_for_column = memory_level;
+            if (plan_state_->columns_to_fetch_.find(std::make_pair(col_id->getScanDesc().getTableId(), col_id->getColId())) ==
+                plan_state_->columns_to_fetch_.end()) {
+                memory_level_for_column = Data_Namespace::CPU_LEVEL;
+            }
+            const auto col_type = get_column_type(col_id.get(), cd, temporary_tables_);
+            const bool is_real_string = col_type.is_string() && col_type.get_compression() == kENCODING_NONE;
+            if (col_id->getScanDesc().getSourceType() == InputSourceType::RESULT) {
+                CHECK(!is_real_string && !col_type.is_array());
+                frag_col_buffers[it->second] = execution_dispatch.getColumn(col_id.get(),
+                                                                            frag_id,
+                                                                            all_tables_fragments,
+                                                                            extra_tab_id_to_frag_offsets,
+                                                                            memory_level_for_column,
+                                                                            device_id,
+                                                                            is_rowid);
+            } else {
+#ifdef ENABLE_MULTIFRAG_JOIN
+                if (needFetchAllFragments(*col_id, ra_exe_unit, selected_fragments)) {
+                    frag_col_buffers[it->second] = execution_dispatch.getAllScanColumnFrags(
+                            table_id, col_id->getColId(), all_tables_fragments, memory_level_for_column, device_id);
+                } else
+#endif
+                {
+                    frag_col_buffers[it->second] = execution_dispatch.getScanColumn(table_id,
+                                                                                    frag_id,
+                                                                                    col_id->getColId(),
+                                                                                    all_tables_fragments,
+                                                                                    chunks,
+                                                                                    chunk_iterators,
+                                                                                    memory_level_for_column,
+                                                                                    device_id);
+                }
+            }
+        }
+        all_frag_col_buffers.push_back(frag_col_buffers);
+        // IteratorTable on the left could only have a single fragment for now.
+        if (needs_fetch_iterators && all_frag_iter_buffers.empty()) {
+            CHECK_EQ(size_t(2), selected_fragments_crossjoin.size());
+            all_frag_iter_buffers.push_back(
+                    fetchIterTabFrags(selected_frag_ids[0], execution_dispatch, ra_exe_unit.input_descs[0], device_id));
+        }
+    }
+    std::tie(all_num_rows, all_frag_offsets) = getRowCountAndOffsetForAllFrags(
+            ra_exe_unit, frag_ids_crossjoin, ra_exe_unit.input_descs, all_tables_fragments, isOuterLoopJoin());
+    return {all_frag_col_buffers, all_frag_iter_buffers, all_num_rows, all_frag_offsets};
+}
+
 
 std::vector<size_t> Executor::getFragmentCount(
     const std::vector<std::pair<int, std::vector<size_t>>>& selected_fragments,

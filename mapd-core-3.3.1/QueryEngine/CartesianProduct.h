@@ -21,6 +21,7 @@
 #include <limits>
 #include <stdexcept>
 #include <vector>
+#include <iostream>
 
 #include <boost/iterator/iterator_facade.hpp>
 
@@ -40,7 +41,11 @@ class CartesianProductIterator : public boost::iterator_facade<CartesianProductI
    * for the end, the position after the last element.
    */
   explicit CartesianProductIterator(T const& structure, std::size_t pos);
-
+  std::vector<typename T::value_type::value_type> const& getValue(std::size_t i) const;
+  std::vector<typename T::value_type::value_type>& getValue_nc(std::size_t i) const;
+  std::size_t const getSize() const{
+    return result_.size();
+  }
  private:
   //! Give types more descriptive names
   // \{
@@ -85,41 +90,83 @@ class CartesianProductIterator : public boost::iterator_facade<CartesianProductI
   /*!
    * We initialize with one empty element, so that we only need to add more elements in increment().
    */
-  mutable std::vector<std::vector<Content>> result_{std::vector<Content>()};
+  mutable std::vector<std::vector<Content>> result_;
 
   //! The size of the instance of OuterContainer
   std::size_t size_ = 0;
+
+  size_t order_size_;
 };
 
 template <typename T>
 CartesianProductIterator<T>::CartesianProductIterator(OuterContainer const& structure, std::size_t pos)
     : structure_(structure) {
-  for (auto& entry : structure_) {
-    cbegins_.push_back(entry.cbegin());
-    cends_.push_back(entry.cend());
-    ++size_;
-  }
 
+  std::vector<size_t> index_;
+  std::vector<size_t> input_size;
+  order_size_ = 1;
+  for (auto &entry:structure_) {
+      if(entry.size()!=0) {
+          ++size_;
+          index_.push_back(0);
+          input_size.push_back(entry.size());
+          order_size_ *= entry.size();
+      }
+  }
+//  std::cout<<"amount: "<<amount_<<std::endl;
+  //last_stop_ = 0;
   if (pos == std::numeric_limits<std::size_t>::max() || size_ == 0) {
     absolutePosition_ = std::numeric_limits<std::size_t>::max();
     return;
   }
-
-  // Initialize with all cbegin() position
-  position_.reserve(size_);
-  for (std::size_t i = 0; i != size_; ++i) {
-    position_.push_back(cbegins_[i]);
-    if (cbegins_[i] == cends_[i]) {
-      // Empty member, so Cartesian product is empty
-      absolutePosition_ = std::numeric_limits<std::size_t>::max();
-      return;
+  std::vector<size_t> steps(input_size);
+  for (size_t i = 0; i != order_size_; ++i) {
+    std::vector<Content> row;
+    for(size_t j=0;j<size_;++j) {
+      row.push_back(structure[j][index_[j]]);
+    }
+    result_.push_back(row);
+    for(size_t j=size_;j>0;--j){
+      if(--steps[j-1]==0){
+        steps[j-1]=input_size[j-1];
+        continue;
+      }
+      else{
+        index_[j-1]=(index_[j-1]+1)%input_size[j-1];
+        break;
+      }
     }
   }
-
   // Increment to wanted position
   for (std::size_t i = 0; i < pos; ++i) {
     increment();
   }
+//  for (auto& entry : structure_) {
+//    cbegins_.push_back(entry.cbegin());
+//    cends_.push_back(entry.cend());
+//    ++size_;
+//  }
+//
+//  if (pos == std::numeric_limits<std::size_t>::max() || size_ == 0) {
+//    absolutePosition_ = std::numeric_limits<std::size_t>::max();
+//    return;
+//  }
+//
+//  // Initialize with all cbegin() position
+//  position_.reserve(size_);
+//  for (std::size_t i = 0; i != size_; ++i) {
+//    position_.push_back(cbegins_[i]);
+//    if (cbegins_[i] == cends_[i]) {
+//      // Empty member, so Cartesian product is empty
+//      absolutePosition_ = std::numeric_limits<std::size_t>::max();
+//      return;
+//    }
+//  }
+//
+//  // Increment to wanted position
+//  for (std::size_t i = 0; i < pos; ++i) {
+//    increment();
+//  }
 }
 
 template <typename T>
@@ -127,24 +174,33 @@ void CartesianProductIterator<T>::increment() {
   if (absolutePosition_ == std::numeric_limits<std::size_t>::max()) {
     return;
   }
-
-  std::size_t pos = size_ - 1;
-
-  // Descend as far as necessary
-  while (++(position_[pos]) == cends_[pos] && pos != 0) {
-    --pos;
-  }
-  if (position_[pos] == cends_[pos]) {
-    assert(pos == 0);
-    absolutePosition_ = std::numeric_limits<std::size_t>::max();
+  if(absolutePosition_>=order_size_-1){
+    absolutePosition_=std::numeric_limits<std::size_t>::max();
     return;
   }
-  // Set all to begin behind pos
-  for (++pos; pos != size_; ++pos) {
-    position_[pos] = cbegins_[pos];
-  }
   ++absolutePosition_;
-  result_.emplace_back();
+//  if (absolutePosition_ == std::numeric_limits<std::size_t>::max()) {
+//    return;
+//  }
+//
+//  std::size_t pos = size_ - 1;
+//
+//  // Descend as far as necessary
+//  while (++(position_[pos]) == cends_[pos] && pos != 0) {
+//    --pos;
+//  }
+//  if (position_[pos] == cends_[pos]) {
+//    assert(pos == 0);
+//    absolutePosition_ = std::numeric_limits<std::size_t>::max();
+//    return;
+//  }
+//  // Set all to begin behind pos
+//  for (++pos; pos != size_; ++pos) {
+//    position_[pos] = cbegins_[pos];
+//  }
+//  ++absolutePosition_;
+//  result_.emplace_back();
+
 }
 
 template <typename T>
@@ -152,15 +208,24 @@ std::vector<typename T::value_type::value_type> const& CartesianProductIterator<
   if (absolutePosition_ == std::numeric_limits<std::size_t>::max()) {
     throw new std::out_of_range("Out of bound dereference in CartesianProductIterator\n");
   }
-  auto& result = result_[absolutePosition_];
-  if (result.empty()) {
-    result.reserve(size_);
-    for (auto& iterator : position_) {
-      result.push_back(*iterator);
-    }
-  }
-
+  auto &result = result_[absolutePosition_];
   return result;
+}
+template <typename T>
+std::vector<typename T::value_type::value_type> const& CartesianProductIterator<T>::getValue(std::size_t i) const {
+  if (i >= result_.size()) {
+    throw new std::out_of_range("Out of bound dereference in CartesianProductIterator\n");
+  }
+  auto &result = result_[i];
+  return result;
+}
+template <typename T>
+std::vector<typename T::value_type::value_type> &CartesianProductIterator<T>::getValue_nc(std::size_t i) const {
+    if (i >= result_.size()) {
+        throw new std::out_of_range("Out of bound dereference in CartesianProductIterator\n");
+    }
+    auto &result = result_[i];
+    return result;
 }
 
 template <typename T>
@@ -174,7 +239,7 @@ template <typename T>
 class CartesianProduct {
  public:
   //! Constructor from type T
-  explicit CartesianProduct(T const& t) : t_(t) {}
+  explicit CartesianProduct(T const& t) : t_(t), iterator_(t,0) { }
 
   //! Iterator to beginning of Cartesian product
   CartesianProductIterator<T> begin() const { return CartesianProductIterator<T>(t_, 0); }
@@ -183,7 +248,16 @@ class CartesianProduct {
   CartesianProductIterator<T> end() const {
     return CartesianProductIterator<T>(t_, std::numeric_limits<std::size_t>::max());
   }
-
+  std::vector<typename T::value_type::value_type> const& operator[] (const std::size_t pos) const {
+    return iterator_.getValue(pos);
+  };
+  std::vector<typename T::value_type::value_type> &operator[] (const std::size_t pos){
+    return iterator_.getValue_nc(pos);
+  };
+  std::size_t const size() const{
+    return iterator_.getSize();
+  }
  private:
   T const& t_;
+  CartesianProductIterator<T> iterator_;
 };

@@ -72,6 +72,7 @@ extern bool g_from_table_reordering;
 extern bool g_allow_cpu_retry;
 extern bool g_null_div_by_zero;
 extern bool g_bigint_count;
+extern bool g_enable_streaming;
 
 struct RenderInfo {
   bool do_render;
@@ -667,7 +668,24 @@ class Executor {
                  const size_t ctx_idx,
                  const int64_t rowid_lookup_key);
 
-   public:
+
+    void runImplWithStream(const ExecutorDeviceType chosen_device_type,
+                           int chosen_device_id,
+                           const ExecutionOptions& options,
+                           const std::vector<std::pair<int, std::vector<size_t>>>& frag_ids,
+                           const size_t ctx_idx,
+                           const int64_t rowid_lookup_key);
+    //SUNNY: A single stream task, include FETCH, GET CONTEXT, EXECUTE, COLLECT RESULT.
+    void SingleStream(const ExecutorDeviceType chosen_device_type,
+                      int chosen_device_id,
+                      const ExecutionOptions& options,
+                      const std::vector<std::pair<int, std::vector<size_t>>>& frag_ids,
+                      const size_t ctx_idx,
+                      const int64_t rowid_lookup_key,
+                      const int outer_table_id,
+                      const MemoryLevel& memory_level,
+                      const std::map<int, const TableFragments*>& all_tables_fragments);
+public:
     ExecutionDispatch(Executor* executor,
                       const RelAlgExecutionUnit& ra_exe_unit,
                       const std::vector<InputTableInfo>& query_infos,
@@ -836,6 +854,18 @@ class Executor {
                           const Catalog_Namespace::Catalog&,
                           std::list<ChunkIter>&,
                           std::list<std::shared_ptr<Chunk_NS::Chunk>>&);
+
+  //SUNNY:Stream version, move out the Cartesian producing part
+  FetchResult fetchChunksWithStream(const ExecutionDispatch&,
+                                    const RelAlgExecutionUnit& ra_exe_unit,
+                                    const int device_id,
+                                    const Data_Namespace::MemoryLevel,
+                                    const std::map<int, const TableFragments*>&,
+                                    const std::vector<std::pair<int, std::vector<size_t>>>& selected_fragments,
+                                    const Catalog_Namespace::Catalog&,
+                                    std::list<ChunkIter>&,
+                                    std::list<std::shared_ptr<Chunk_NS::Chunk>>&);
+
 
   std::pair<std::vector<std::vector<int64_t>>, std::vector<std::vector<uint64_t>>> getRowCountAndOffsetForAllFrags(
       const RelAlgExecutionUnit& ra_exe_unit,
