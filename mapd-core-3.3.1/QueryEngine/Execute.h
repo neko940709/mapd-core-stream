@@ -684,7 +684,10 @@ class Executor {
                       const int64_t rowid_lookup_key,
                       const int outer_table_id,
                       const MemoryLevel& memory_level,
-                      const std::map<int, const TableFragments*>& all_tables_fragments);
+                      const std::map<int, const TableFragments*>& all_tables_fragments,
+                      const std::vector<size_t>& local_col_to_frag_pos,
+                      const std::vector<size_t> &cartesianItem,
+                      int s_n);
 public:
     ExecutionDispatch(Executor* executor,
                       const RelAlgExecutionUnit& ra_exe_unit,
@@ -856,15 +859,16 @@ public:
                           std::list<std::shared_ptr<Chunk_NS::Chunk>>&);
 
   //SUNNY:Stream version, move out the Cartesian producing part
-  FetchResult fetchChunksWithStream(const ExecutionDispatch&,
+  FetchResult fetchChunksWithStream(const ExecutionDispatch& execution_dispatch,
                                     const RelAlgExecutionUnit& ra_exe_unit,
                                     const int device_id,
-                                    const Data_Namespace::MemoryLevel,
-                                    const std::map<int, const TableFragments*>&,
-                                    const std::vector<std::pair<int, std::vector<size_t>>>& selected_fragments,
-                                    const Catalog_Namespace::Catalog&,
+                                    const Data_Namespace::MemoryLevel memory_level,
+                                    const std::map<int, const TableFragments*>& all_tables_fragments,
+                                    const std::vector<size_t> &cartesianItem,
+                                    const Catalog_Namespace::Catalog& cat,
                                     std::list<ChunkIter>&,
-                                    std::list<std::shared_ptr<Chunk_NS::Chunk>>&);
+                                    std::list<std::shared_ptr<Chunk_NS::Chunk>>&,
+                                    const std::vector<size_t> &local_col_to_frag_pos);
 
 
   std::pair<std::vector<std::vector<int64_t>>, std::vector<std::vector<uint64_t>>> getRowCountAndOffsetForAllFrags(

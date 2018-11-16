@@ -19,6 +19,8 @@
 
 #include <cstdlib>
 #include <vector>
+#include <thread>
+#include <map>
 #ifdef HAVE_CUDA
 #include <cuda.h>
 #else
@@ -47,6 +49,19 @@ struct DeviceProperties {
   int clockKhz;
 };
 
+class StreamInfo{
+public:
+    CUstream* streams_;
+    CUevent* events_;
+    std::map<std::thread::id,int> td_to_sm_;
+
+    int nItems_;
+    bool flag_{false};
+
+    CUstream* get_stream_from_td(const std::thread::id td_id);
+};
+
+
 class CudaMgr {
  public:
   CudaMgr(const int numGpus, const int startGpu = 0);
@@ -72,6 +87,9 @@ class CudaMgr {
   std::vector<DeviceProperties> deviceProperties;
 
   const std::vector<CUcontext>& getDeviceContexts() const { return deviceContexts; }
+
+  //SUNNY: Manages the info of streams
+  StreamInfo s_info_;
 
  private:
   void fillDeviceProperties();

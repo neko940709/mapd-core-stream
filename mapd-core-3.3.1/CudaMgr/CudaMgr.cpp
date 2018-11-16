@@ -248,6 +248,13 @@ void CudaMgr::checkError(CUresult status) {
 #endif
 }
 
+CUstream* StreamInfo::get_stream_from_td(const std::thread::id td_id) {
+  int s_n = td_to_sm_.find(td_id)->second;
+  CUstream *sm = &streams_[s_n];
+  return sm;
+}
+
+
 }  // CudaMgr_Namespace
 
 /*

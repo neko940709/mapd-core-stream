@@ -856,6 +856,12 @@ std::vector<int64_t*> QueryExecutionContext::launchGpuCode(const RelAlgExecution
     initializeDynamicWatchdog(cu_functions[device_id].second, device_id);
   }
 
+  //SUNNY
+  CUstream sm= nullptr;
+  if(g_enable_streaming){
+    sm = data_mgr->cudaMgr_->s_info_.get_stream_from_td(std::this_thread::get_id());
+  }
+
   auto kernel_params = prepareKernelParams(col_buffers,
                                            literal_buff,
                                            num_rows,
@@ -920,7 +926,7 @@ std::vector<int64_t*> QueryExecutionContext::launchGpuCode(const RelAlgExecution
                                      block_size_y,
                                      block_size_z,
                                      query_mem_desc_.sharedMemBytes(ExecutorDeviceType::GPU),
-                                     nullptr,
+                                     sm,
                                      &param_ptrs[0],
                                      nullptr));
     } else {
@@ -933,7 +939,7 @@ std::vector<int64_t*> QueryExecutionContext::launchGpuCode(const RelAlgExecution
                                      block_size_y,
                                      block_size_z,
                                      query_mem_desc_.sharedMemBytes(ExecutorDeviceType::GPU),
-                                     nullptr,
+                                     sm,
                                      &param_ptrs[0],
                                      nullptr));
     }
@@ -1025,7 +1031,7 @@ std::vector<int64_t*> QueryExecutionContext::launchGpuCode(const RelAlgExecution
                                      block_size_y,
                                      block_size_z,
                                      0,
-                                     nullptr,
+                                     sm,
                                      &param_ptrs[0],
                                      nullptr));
     } else {
@@ -1038,7 +1044,7 @@ std::vector<int64_t*> QueryExecutionContext::launchGpuCode(const RelAlgExecution
                                      block_size_y,
                                      block_size_z,
                                      0,
-                                     nullptr,
+                                     sm,
                                      &param_ptrs[0],
                                      nullptr));
     }

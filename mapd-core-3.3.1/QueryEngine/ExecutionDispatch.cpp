@@ -375,7 +375,6 @@ void Executor::ExecutionDispatch::runImpl(const ExecutorDeviceType chosen_device
 }
 
 //SUNNY:STREAM VERSION
-
 void Executor::ExecutionDispatch::SingleStream(const ExecutorDeviceType chosen_device_type,
                                               int chosen_device_id,
                                               const ExecutionOptions& options,
@@ -384,7 +383,13 @@ void Executor::ExecutionDispatch::SingleStream(const ExecutorDeviceType chosen_d
                                               const int64_t rowid_lookup_key,
                                               const int outer_table_id,
                                               const MemoryLevel& memory_level,
-                                              const std::map<int, const TableFragments*>& all_tables_fragments){
+                                              const std::map<int, const TableFragments*>& all_tables_fragments,
+                                              const std::vector<size_t>& local_col_to_frag_pos,
+                                              const std::vector<size_t> &cartesianItem,
+                                              int s_n){
+  auto& cudaMgr = cat_.get_dataMgr().cudaMgr_;
+  cudaMgr->setContext(chosen_device_id);  //SUNNY: for stream using
+
   CHECK_GE(frag_ids.size(), size_t(1));
 #ifndef ENABLE_EQUIJOIN_FOLD
   CHECK_LE(frag_ids.size(), size_t(2));
@@ -401,16 +406,28 @@ void Executor::ExecutionDispatch::SingleStream(const ExecutorDeviceType chosen_d
     gpu_lock.reset(new std::lock_guard<std::mutex>(executor_->gpu_exec_mutex_[chosen_device_id]));
   }
   FetchResult fetch_result;
+
+  //SUNNY: Mapping threads to streams' ID
+  cudaMgr->s_info_.td_to_sm_[std::this_thread::get_id()] = s_n;
   try {
-    fetch_result = executor_->fetchChunks(*this,
-                                          ra_exe_unit_,
-                                          chosen_device_id,
-                                          memory_level,
-                                          all_tables_fragments,
-                                          frag_ids,
-                                          cat_,
-                                          *chunk_iterators_ptr,
-                                          chunks);
+    //SUNNY: Use event to synchronize streams
+    if(s_n){
+      checkCudaErrors(cuStreamWaitEvent(cudaMgr->s_info_.streams_[s_n],cudaMgr->s_info_.events_[s_n-1],0));
+    }
+
+    fetch_result = executor_->fetchChunksWithStream(*this,
+                                                    ra_exe_unit_,
+                                                    chosen_device_id,
+                                                    memory_level,
+                                                    all_tables_fragments,
+                                                    cartesianItem,
+                                                    cat_,
+                                                    *chunk_iterators_ptr,
+                                                    chunks,
+                                                    local_col_to_frag_pos);
+
+    checkCudaErrors(cuEventRecord(cudaMgr->s_info_.events_[s_n],cudaMgr->s_info_.streams_[s_n]));
+
     if (fetch_result.num_rows.empty()) {
       return;
     }
@@ -589,15 +606,62 @@ void Executor::ExecutionDispatch::runImplWithStream(const ExecutorDeviceType cho
     all_tables_fragments.insert(std::make_pair(table_id, &fragments));
   }
 
-  SingleStream(chosen_device_type,
-          chosen_device_id,
-          options,
-          frag_ids,
-          ctx_idx,
-          rowid_lookup_key,
-          outer_table_id,
-          memory_level,
-          all_tables_fragments);
+
+
+  int nItems = frag_ids_crossjoin.size();
+  int nStream = nItems;
+  int nEvent = nStream;
+
+  CUstream *streams = (CUstream *)malloc(nItems* sizeof(CUstream));
+  for(int i=0;i<nStream;++i){
+      checkCudaErrors(cuStreamCreate(&streams[i],CU_STREAM_NON_BLOCKING));
+  }
+
+  CUevent *events = (CUevent *)malloc(nEvent*sizeof(CUevent));
+  for(int i=0;i<nEvent;++i){
+      checkCudaErrors(cuEventCreate(&events[i],CU_EVENT_DISABLE_TIMING));
+  }
+
+  auto& cudaMgr = cat_.get_dataMgr().cudaMgr_;
+  cudaMgr->s_info_.streams_ = streams;
+  cudaMgr->s_info_.events_ = events;
+  cudaMgr->s_info_.nItems_ = nItems;
+  cudaMgr->s_info_.flag_=true;
+
+  std::vector<std::thread> multi_stream_tasks;
+
+  for(int s_n=0;s_n<nItems;++s_n){
+      const auto& cartesianItem = frag_ids_crossjoin[s_n];
+      multi_stream_tasks.emplace_back(std::thread(&Executor::ExecutionDispatch::SingleStream,
+                                                  this,
+                                                  chosen_device_type,
+                                                  chosen_device_id,
+                                                  options,
+                                                  frag_ids,
+                                                  ctx_idx,
+                                                  rowid_lookup_key,
+                                                  outer_table_id,
+                                                  memory_level,
+                                                  all_tables_fragments,
+                                                  local_col_to_frag_pos,
+                                                  cartesianItem,
+                                                  s_n));
+  }
+
+  for(int i=0;i<multi_stream_tasks.size();++i){
+      multi_stream_tasks[i].join();
+  }
+//  SingleStream(chosen_device_type,
+//          chosen_device_id,
+//          options,
+//          frag_ids,
+//          ctx_idx,
+//          rowid_lookup_key,
+//          outer_table_id,
+//          memory_level,
+//          all_tables_fragments,
+//          local_col_to_frag_pos,
+//          cartesianItem);
 
 }
 

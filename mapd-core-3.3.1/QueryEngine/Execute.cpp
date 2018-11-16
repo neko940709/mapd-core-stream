@@ -1508,6 +1508,52 @@ Executor::getRowCountAndOffsetForAllFrags(const RelAlgExecutionUnit& ra_exe_unit
   return {all_num_rows, all_frag_offsets};
 }
 
+// Hao: added this function to fetch row_count & offset for specific frags (cartesian item)
+//      simply removed the FOR loop
+std::pair<std::vector<std::vector<int64_t>>, std::vector<std::vector<uint64_t>>> get_row_count_and_offset_for_frags(
+        const std::vector<size_t> cartesianItem,
+        const std::vector<InputDescriptor>& input_descs,
+        const std::map<int, const Executor::TableFragments*>& all_tables_fragments,
+        const bool one_to_all_frags) {
+  std::vector<std::vector<int64_t>> all_num_rows;
+  std::vector<std::vector<uint64_t>> all_frag_offsets;
+  const auto tab_id_to_frag_offsets = get_table_id_to_frag_offsets(input_descs, all_tables_fragments);
+  CHECK(!one_to_all_frags || input_descs.size() == 2);
+  std::unordered_map<size_t, size_t> outer_id_to_num_row_idx;
+//  for (const auto& selected_frag_ids : frag_ids_crossjoin) {
+  std::vector<int64_t> num_rows;
+  std::vector<uint64_t> frag_offsets;
+  CHECK_EQ(cartesianItem.size(), input_descs.size());
+  for (size_t tab_idx = 0; tab_idx < input_descs.size(); ++tab_idx) {
+    const auto frag_id = cartesianItem[tab_idx];
+    const auto fragments_it = all_tables_fragments.find(input_descs[tab_idx].getTableId());
+    CHECK(fragments_it != all_tables_fragments.end());
+    const auto& fragments = *fragments_it->second;
+    const auto& fragment = fragments[frag_id];
+    num_rows.push_back(fragment.getNumTuples());
+    const auto frag_offsets_it = tab_id_to_frag_offsets.find(input_descs[tab_idx].getTableId());
+    CHECK(frag_offsets_it != tab_id_to_frag_offsets.end());
+    const auto& offsets = frag_offsets_it->second;
+    CHECK_LT(frag_id, offsets.size());
+    frag_offsets.push_back(offsets[frag_id]);
+  }
+  all_num_rows.push_back(num_rows);
+  if (one_to_all_frags) {
+    const auto outer_frag_id = cartesianItem[0];
+    if (outer_id_to_num_row_idx.count(outer_frag_id)) {
+      all_num_rows[outer_id_to_num_row_idx[outer_frag_id]][1] += num_rows[1];
+    } else {
+      outer_id_to_num_row_idx.insert(std::make_pair(outer_frag_id, all_num_rows.size() - 1));
+    }
+  }
+  // Fragment offsets of outer table should be ONLY used by rowid for now.
+  all_frag_offsets.push_back(frag_offsets);
+//  }
+  return {all_num_rows, all_frag_offsets};
+};
+
+
+
 #ifdef ENABLE_MULTIFRAG_JOIN
 // Only fetch columns of hash-joined inner fact table whose fetch are not deferred from all the table fragments.
 bool Executor::needFetchAllFragments(const InputColDescriptor& inner_col_desc,
@@ -1635,17 +1681,18 @@ Executor::FetchResult Executor::fetchChunksWithStream(const ExecutionDispatch& e
                                                     const int device_id,
                                                     const Data_Namespace::MemoryLevel memory_level,
                                                     const std::map<int, const TableFragments*>& all_tables_fragments,
-                                                    const std::vector<std::pair<int, std::vector<size_t>>>& selected_fragments,
+                                                    const std::vector<size_t> &cartesianItem,,
                                                     const Catalog_Namespace::Catalog& cat,
                                                     std::list<ChunkIter>& chunk_iterators,
-                                                    std::list<std::shared_ptr<Chunk_NS::Chunk>>& chunks) {
+                                                    std::list<std::shared_ptr<Chunk_NS::Chunk>>& chunks,
+                                                    const std::vector<size_t> &local_col_to_frag_pos) {
     const auto& col_global_ids = ra_exe_unit.input_col_descs;
-    std::vector<std::vector<size_t>> selected_fragments_crossjoin;
-    std::vector<size_t> local_col_to_frag_pos;
-    buildSelectedFragsMapping(
-            selected_fragments_crossjoin, local_col_to_frag_pos, col_global_ids, selected_fragments, ra_exe_unit);
+//    std::vector<std::vector<size_t>> selected_fragments_crossjoin;
+//    std::vector<size_t> local_col_to_frag_pos;
+//    buildSelectedFragsMapping(
+//            selected_fragments_crossjoin, local_col_to_frag_pos, col_global_ids, selected_fragments, ra_exe_unit);
 
-    CartesianProduct<std::vector<std::vector<size_t>>> frag_ids_crossjoin(selected_fragments_crossjoin);
+//    CartesianProduct<std::vector<std::vector<size_t>>> frag_ids_crossjoin(selected_fragments_crossjoin);
 
     std::vector<std::vector<const int8_t*>> all_frag_col_buffers;
     std::vector<std::vector<const int8_t*>> all_frag_iter_buffers;
@@ -1656,7 +1703,7 @@ Executor::FetchResult Executor::fetchChunksWithStream(const ExecutionDispatch& e
     const bool needs_fetch_iterators =
             ra_exe_unit.join_dimensions.size() > 2 && dynamic_cast<Analyzer::IterExpr*>(ra_exe_unit.target_exprs.front());
 
-    for (const auto& selected_frag_ids : frag_ids_crossjoin) {
+   // for (const auto& selected_frag_ids : frag_ids_crossjoin) {
         std::vector<const int8_t*> frag_col_buffers(plan_state_->global_to_local_col_ids_.size());
         for (const auto& col_id : col_global_ids) {
             CHECK(col_id);
@@ -1676,7 +1723,7 @@ Executor::FetchResult Executor::fetchChunksWithStream(const ExecutionDispatch& e
             auto it = plan_state_->global_to_local_col_ids_.find(*col_id);
             CHECK(it != plan_state_->global_to_local_col_ids_.end());
             CHECK_LT(static_cast<size_t>(it->second), plan_state_->global_to_local_col_ids_.size());
-            const size_t frag_id = selected_frag_ids[local_col_to_frag_pos[it->second]];
+            const size_t frag_id = cartesianItem[local_col_to_frag_pos[it->second]];
             if (!fragments->size()) {
                 return {};
             }
@@ -1699,7 +1746,7 @@ Executor::FetchResult Executor::fetchChunksWithStream(const ExecutionDispatch& e
                                                                             is_rowid);
             } else {
 #ifdef ENABLE_MULTIFRAG_JOIN
-                if (needFetchAllFragments(*col_id, ra_exe_unit, selected_fragments)) {
+                if (needFetchAllFragments(*col_id, ra_exe_unit, cartesianItem)) {
                     frag_col_buffers[it->second] = execution_dispatch.getAllScanColumnFrags(
                             table_id, col_id->getColId(), all_tables_fragments, memory_level_for_column, device_id);
                 } else
@@ -1719,13 +1766,13 @@ Executor::FetchResult Executor::fetchChunksWithStream(const ExecutionDispatch& e
         all_frag_col_buffers.push_back(frag_col_buffers);
         // IteratorTable on the left could only have a single fragment for now.
         if (needs_fetch_iterators && all_frag_iter_buffers.empty()) {
-            CHECK_EQ(size_t(2), selected_fragments_crossjoin.size());
+            CHECK_EQ(size_t(2), cartesianItem.size());
             all_frag_iter_buffers.push_back(
-                    fetchIterTabFrags(selected_frag_ids[0], execution_dispatch, ra_exe_unit.input_descs[0], device_id));
+                    fetchIterTabFrags(cartesianItem[0], execution_dispatch, ra_exe_unit.input_descs[0], device_id));
         }
-    }
-    std::tie(all_num_rows, all_frag_offsets) = getRowCountAndOffsetForAllFrags(
-            ra_exe_unit, frag_ids_crossjoin, ra_exe_unit.input_descs, all_tables_fragments, isOuterLoopJoin());
+    //}
+    std::tie(all_num_rows, all_frag_offsets) = get_row_count_and_offset_for_frags (
+            cartesianItem, ra_exe_unit.input_descs, all_tables_fragments, isOuterLoopJoin());
     return {all_frag_col_buffers, all_frag_iter_buffers, all_num_rows, all_frag_offsets};
 }
 
