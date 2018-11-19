@@ -104,8 +104,13 @@ void copy_to_gpu(Data_Namespace::DataMgr* data_mgr,
   }
 #endif  // HAVE_CUDA
   CHECK(data_mgr->cudaMgr_);
-  data_mgr->cudaMgr_->copyHostToDevice(
-      reinterpret_cast<int8_t*>(dst), static_cast<const int8_t*>(src), num_bytes, device_id);
+  if(g_enable_streaming){
+    data_mgr->cudaMgr_->copyHostToDeviceAsync(
+            reinterpret_cast<int8_t*>(dst), static_cast<const int8_t*>(src), num_bytes, device_id);
+  } else{
+    data_mgr->cudaMgr_->copyHostToDevice(
+            reinterpret_cast<int8_t*>(dst), static_cast<const int8_t*>(src), num_bytes, device_id);
+  }
 }
 
 namespace {
@@ -231,8 +236,13 @@ void copy_from_gpu(Data_Namespace::DataMgr* data_mgr,
                    const size_t num_bytes,
                    const int device_id) {
   CHECK(data_mgr->cudaMgr_);
-  data_mgr->cudaMgr_->copyDeviceToHost(
-      static_cast<int8_t*>(dst), reinterpret_cast<const int8_t*>(src), num_bytes, device_id);
+  if(g_enable_streaming){
+    data_mgr->cudaMgr_->copyDeviceToHostAsync(
+            static_cast<int8_t*>(dst), reinterpret_cast<const int8_t*>(src), num_bytes, device_id);
+  } else{
+    data_mgr->cudaMgr_->copyDeviceToHost(
+            static_cast<int8_t*>(dst), reinterpret_cast<const int8_t*>(src), num_bytes, device_id);
+  }
 }
 
 void copy_group_by_buffers_from_gpu(Data_Namespace::DataMgr* data_mgr,

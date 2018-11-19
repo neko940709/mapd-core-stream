@@ -648,7 +648,7 @@ void Executor::ExecutionDispatch::runImplWithStream(const ExecutorDeviceType cho
                                                   s_n));
   }
 
-  for(int i=0;i<multi_stream_tasks.size();++i){
+  for(size_t i=0;i<multi_stream_tasks.size();++i){
       multi_stream_tasks[i].join();
   }
 //  SingleStream(chosen_device_type,
@@ -791,7 +791,11 @@ void Executor::ExecutionDispatch::run(const ExecutorDeviceType chosen_device_typ
                                       const size_t ctx_idx,
                                       const int64_t rowid_lookup_key) noexcept {
   try {
-    runImpl(chosen_device_type, chosen_device_id, options, frag_ids, ctx_idx, rowid_lookup_key);
+      if(g_enable_streaming && !ra_exe_unit_.scan_limit){
+          runImplWithStream(chosen_device_type, chosen_device_id, options, frag_ids, ctx_idx, rowid_lookup_key);
+      } else{
+          runImpl(chosen_device_type, chosen_device_id, options, frag_ids, ctx_idx, rowid_lookup_key);
+      }
   } catch (const std::bad_alloc& e) {
     std::lock_guard<std::mutex> lock(reduce_mutex_);
     LOG(ERROR) << e.what();

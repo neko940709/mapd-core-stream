@@ -20,6 +20,7 @@
 #include <cstring>
 #include <assert.h>
 
+
 namespace Buffer_Namespace {
 
 CpuBuffer::CpuBuffer(BufferMgr* bm,
@@ -40,7 +41,11 @@ void CpuBuffer::readData(int8_t* const dst,
   } else if (dstMemoryLevel == GPU_LEVEL) {
     //@todo: use actual device id in next call
     assert(dstDeviceId >= 0);
-    cudaMgr_->copyHostToDevice(dst, mem_ + offset, numBytes, dstDeviceId);  // need to replace 0 with gpu num
+    if(cudaMgr_->s_info_.flag_){
+      cudaMgr_->copyHostToDeviceAsync(dst, mem_ + offset, numBytes, dstDeviceId);
+    } else{
+      cudaMgr_->copyHostToDevice(dst, mem_ + offset, numBytes, dstDeviceId);  // need to replace 0 with gpu num
+    }
   } else {
     LOG(FATAL) << "Unsupported buffer type";
   }
@@ -58,7 +63,11 @@ void CpuBuffer::writeData(int8_t* const src,
     // std::cout << "Writing to CPU from source GPU" << std::endl;
     //@todo: use actual device id in next call
     assert(srcDeviceId >= 0);
-    cudaMgr_->copyDeviceToHost(mem_ + offset, src, numBytes, srcDeviceId);  // need to replace 0 with gpu num
+    if(cudaMgr_->s_info_.flag_){
+      cudaMgr_->copyDeviceToHostAsync(mem_ + offset, src, numBytes, srcDeviceId);
+    } else{
+      cudaMgr_->copyDeviceToHost(mem_ + offset, src, numBytes, srcDeviceId);  // need to replace 0 with gpu num
+    }
   } else {
     LOG(FATAL) << "Unsupported buffer type";
   }

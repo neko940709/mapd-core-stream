@@ -74,6 +74,9 @@ class CudaMgr {
   void freeDeviceMem(int8_t* devicePtr);
   void copyHostToDevice(int8_t* devicePtr, const int8_t* hostPtr, const size_t numBytes, const int deviceNum);
   void copyDeviceToHost(int8_t* hostPtr, const int8_t* devicePtr, const size_t numBytes, const int deviceNum);
+  //SUNNY:STREAM USE
+  void copyHostToDeviceAsync(int8_t* devicePtr, const int8_t* hostPtr, const size_t numBytes, const int deviceNum);
+  void copyDeviceToHostAsync(int8_t* hostPtr, const int8_t* devicePtr, const size_t numBytes, const int deviceNum);
   void copyDeviceToDevice(int8_t* destPtr,
                           int8_t* srcPtr,
                           const size_t numBytes,

@@ -1681,7 +1681,7 @@ Executor::FetchResult Executor::fetchChunksWithStream(const ExecutionDispatch& e
                                                     const int device_id,
                                                     const Data_Namespace::MemoryLevel memory_level,
                                                     const std::map<int, const TableFragments*>& all_tables_fragments,
-                                                    const std::vector<size_t> &cartesianItem,,
+                                                    const std::vector<size_t> &cartesianItem,
                                                     const Catalog_Namespace::Catalog& cat,
                                                     std::list<ChunkIter>& chunk_iterators,
                                                     std::list<std::shared_ptr<Chunk_NS::Chunk>>& chunks,
@@ -1745,13 +1745,13 @@ Executor::FetchResult Executor::fetchChunksWithStream(const ExecutionDispatch& e
                                                                             device_id,
                                                                             is_rowid);
             } else {
-#ifdef ENABLE_MULTIFRAG_JOIN
-                if (needFetchAllFragments(*col_id, ra_exe_unit, cartesianItem)) {
-                    frag_col_buffers[it->second] = execution_dispatch.getAllScanColumnFrags(
-                            table_id, col_id->getColId(), all_tables_fragments, memory_level_for_column, device_id);
-                } else
-#endif
-                {
+//#ifdef ENABLE_MULTIFRAG_JOIN
+//                if (needFetchAllFragments(*col_id, ra_exe_unit, cartesianItem)) {
+//                    frag_col_buffers[it->second] = execution_dispatch.getAllScanColumnFrags(
+//                            table_id, col_id->getColId(), all_tables_fragments, memory_level_for_column, device_id);
+//                } else
+//#endif
+//                {
                     frag_col_buffers[it->second] = execution_dispatch.getScanColumn(table_id,
                                                                                     frag_id,
                                                                                     col_id->getColId(),
@@ -1762,7 +1762,7 @@ Executor::FetchResult Executor::fetchChunksWithStream(const ExecutionDispatch& e
                                                                                     device_id);
                 }
             }
-        }
+//        }
         all_frag_col_buffers.push_back(frag_col_buffers);
         // IteratorTable on the left could only have a single fragment for now.
         if (needs_fetch_iterators && all_frag_iter_buffers.empty()) {

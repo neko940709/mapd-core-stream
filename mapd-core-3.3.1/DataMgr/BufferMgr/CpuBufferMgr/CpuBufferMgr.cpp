@@ -58,4 +58,5 @@ void CpuBufferMgr::allocateBuffer(BufferList::iterator segIt, const size_t pageS
                                                                            // buffer member
 }
 
+
 }  // Buffer_Namespace

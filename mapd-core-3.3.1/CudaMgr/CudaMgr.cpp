@@ -204,6 +204,34 @@ void CudaMgr::copyDeviceToHost(int8_t* hostPtr, const int8_t* devicePtr, const s
 #endif
 }
 
+//SUNNY: STREAM USE
+void CudaMgr::copyHostToDeviceAsync(int8_t* devicePtr, const int8_t* hostPtr, const size_t numBytes, const int deviceNum) {
+#ifdef HAVE_CUDA
+    setContext(deviceNum);
+    //ALLOC PINNED MEM
+    void* mem;
+    checkError(cuMemAllocHost(&mem,numBytes));
+    memcpy(mem,hostPtr,numBytes);
+    checkError(cuMemHostRegister(mem,numBytes,CU_MEMHOSTREGISTER_PORTABLE));
+    //FETCH STREAM
+    CUstream *sm = s_info_.get_stream_from_td(std::this_thread::get_id());
+    checkError(cuMemcpyHtoDAsync_v2(reinterpret_cast<CUdeviceptr>(devicePtr), hostPtr, numBytes,*sm));
+    //FREE PINNED MEM
+    checkError(cuMemFreeHost(mem));
+#endif
+}
+
+void CudaMgr::copyDeviceToHostAsync(int8_t* hostPtr, const int8_t* devicePtr, const size_t numBytes, const int deviceNum) {
+#ifdef HAVE_CUDA
+    setContext(deviceNum);
+    //LOCK DRAM
+    checkError(cuMemHostRegister(hostPtr,numBytes,CU_MEMHOSTREGISTER_PORTABLE));
+    //FETCH STREAM
+    CUstream *sm = s_info_.get_stream_from_td(std::this_thread::get_id());
+    checkError(cuMemcpyDtoHAsync_v2(hostPtr, reinterpret_cast<const CUdeviceptr>(devicePtr), numBytes,*sm));
+#endif
+}
+
 // destDeviceNum and srcDeviceNum are the device numbers relative to startGpu (realDeviceNum - startGpu_)
 void CudaMgr::copyDeviceToDevice(int8_t* destPtr,
                                  int8_t* srcPtr,
