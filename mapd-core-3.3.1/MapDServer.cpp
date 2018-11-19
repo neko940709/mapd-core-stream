@@ -351,6 +351,9 @@ int main(int argc, char** argv) {
   desc_adv.add_options()("allow-cpu-retry",
                          po::value<bool>(&g_allow_cpu_retry)->default_value(g_allow_cpu_retry)->implicit_value(true),
                          "Allow the queries which failed on GPU to retry on CPU, even when watchdog is enabled");
+  desc_adv.add_options()("stream-mode",
+                         po::value<bool>(&g_enable_streaming)->default_value(g_enable_streaming)->implicit_value(true),
+                         "Enable stream mode");
   desc_adv.add_options()(
       "db-query-list", po::value<std::string>(&db_query_file), "Path to file containing mapd queries");
   desc_adv.add_options()(
