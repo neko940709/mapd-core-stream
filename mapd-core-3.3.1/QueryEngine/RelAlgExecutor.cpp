@@ -1379,6 +1379,8 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
                   (render_info && render_info->do_render ? render_info->render_allocator_map_ptr.get() : nullptr),
                   groups_approx_upper_bound(table_infos) <= big_group_threshold),
               targets_meta};
+    //SUNNY: We have a global catalog which includes streams' information. Need to delete them.
+    cat_.get_dataMgr().cudaMgr_->s_info_.freeStreamInfo();
   } catch (const CardinalityEstimationRequired&) {
     max_groups_buffer_entry_guess =
         2 * std::min(groups_approx_upper_bound(table_infos), getNDVEstimation(work_unit, is_agg, co, eo));
@@ -1396,6 +1398,7 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
                   (render_info && render_info->do_render ? render_info->render_allocator_map_ptr.get() : nullptr),
                   true),
               targets_meta};
+    cat_.get_dataMgr().cudaMgr_->s_info_.freeStreamInfo();
   }
 
   result.setQueueTime(queue_time_ms);

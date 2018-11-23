@@ -859,7 +859,8 @@ std::vector<int64_t*> QueryExecutionContext::launchGpuCode(const RelAlgExecution
   //SUNNY
   CUstream sm= nullptr;
   if(g_enable_streaming){
-    sm = *data_mgr->cudaMgr_->s_info_.get_stream_from_td(std::this_thread::get_id());
+      if(data_mgr->cudaMgr_->s_info_.flag_)
+        sm = *data_mgr->cudaMgr_->s_info_.get_stream_from_td(std::this_thread::get_id());
   }
 
   auto kernel_params = prepareKernelParams(col_buffers,

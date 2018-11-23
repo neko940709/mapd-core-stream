@@ -606,7 +606,8 @@ void Executor::ExecutionDispatch::runImplWithStream(const ExecutorDeviceType cho
     all_tables_fragments.insert(std::make_pair(table_id, &fragments));
   }
 
-
+  auto& cudaMgr = cat_.get_dataMgr().cudaMgr_;
+  cudaMgr->setContext(chosen_device_id);
 
   int nItems = frag_ids_crossjoin.size();
   int nStream = nItems;
@@ -622,11 +623,11 @@ void Executor::ExecutionDispatch::runImplWithStream(const ExecutorDeviceType cho
       checkCudaErrors(cuEventCreate(&events[i],CU_EVENT_DISABLE_TIMING));
   }
 
-  auto& cudaMgr = cat_.get_dataMgr().cudaMgr_;
-  cudaMgr->s_info_.streams_ = streams;
-  cudaMgr->s_info_.events_ = events;
-  cudaMgr->s_info_.nItems_ = nItems;
-  cudaMgr->s_info_.flag_=true;
+  auto& s_info = cudaMgr->s_info_;
+  s_info.streams_ = streams;
+  s_info.events_ = events;
+  s_info.nItems_ = nItems;
+  s_info.flag_=true;
 
   std::vector<std::thread> multi_stream_tasks;
 
@@ -791,7 +792,7 @@ void Executor::ExecutionDispatch::run(const ExecutorDeviceType chosen_device_typ
                                       const size_t ctx_idx,
                                       const int64_t rowid_lookup_key) noexcept {
   try {
-      if(g_enable_streaming && !ra_exe_unit_.scan_limit){
+      if(g_enable_streaming && ra_exe_unit_.scan_limit){
           runImplWithStream(chosen_device_type, chosen_device_id, options, frag_ids, ctx_idx, rowid_lookup_key);
       } else{
           runImpl(chosen_device_type, chosen_device_id, options, frag_ids, ctx_idx, rowid_lookup_key);

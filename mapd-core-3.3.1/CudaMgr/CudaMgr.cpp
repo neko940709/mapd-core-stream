@@ -212,15 +212,15 @@ void CudaMgr::copyHostToDeviceAsync(int8_t* devicePtr, const int8_t* hostPtr, co
     void* mem;
     checkError(cuMemAllocHost(&mem,numBytes));
     memcpy(mem,hostPtr,numBytes);
-    checkError(cuMemHostRegister(mem,numBytes,CU_MEMHOSTREGISTER_PORTABLE));
     //FETCH STREAM
     CUstream *sm = s_info_.get_stream_from_td(std::this_thread::get_id());
-    checkError(cuMemcpyHtoDAsync_v2(reinterpret_cast<CUdeviceptr>(devicePtr), hostPtr, numBytes,*sm));
+    checkError(cuMemcpyHtoDAsync(reinterpret_cast<CUdeviceptr>(devicePtr), reinterpret_cast<int8_t*>(mem), numBytes,*sm));
     //FREE PINNED MEM
     checkError(cuMemFreeHost(mem));
 #endif
 }
 
+//SUNNY:STREAM USE
 void CudaMgr::copyDeviceToHostAsync(int8_t* hostPtr, const int8_t* devicePtr, const size_t numBytes, const int deviceNum) {
 #ifdef HAVE_CUDA
     setContext(deviceNum);
@@ -228,7 +228,9 @@ void CudaMgr::copyDeviceToHostAsync(int8_t* hostPtr, const int8_t* devicePtr, co
     checkError(cuMemHostRegister(hostPtr,numBytes,CU_MEMHOSTREGISTER_PORTABLE));
     //FETCH STREAM
     CUstream *sm = s_info_.get_stream_from_td(std::this_thread::get_id());
-    checkError(cuMemcpyDtoHAsync_v2(hostPtr, reinterpret_cast<const CUdeviceptr>(devicePtr), numBytes,*sm));
+    checkError(cuMemcpyDtoHAsync(hostPtr, reinterpret_cast<const CUdeviceptr>(devicePtr), numBytes,*sm));
+    checkError(cuMemHostUnregister(hostPtr));
+
 #endif
 }
 
@@ -280,6 +282,18 @@ CUstream* StreamInfo::get_stream_from_td(const std::thread::id td_id) {
   int s_n = td_to_sm_.find(td_id)->second;
   CUstream *sm = &streams_[s_n];
   return sm;
+}
+
+void StreamInfo::freeStreamInfo() {
+    if(nItems_>0){
+        for(int i=0;i<nItems_;++i){
+            cuStreamDestroy(streams_[i]);
+            cuEventDestroy(events_[i]);
+        }
+        td_to_sm_.clear();
+        nItems_=0;
+        flag_=false;
+    }
 }
 
 

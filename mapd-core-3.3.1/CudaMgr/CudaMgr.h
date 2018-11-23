@@ -59,6 +59,7 @@ public:
     bool flag_{false};
 
     CUstream* get_stream_from_td(const std::thread::id td_id);
+    void freeStreamInfo();
 };
 
 
