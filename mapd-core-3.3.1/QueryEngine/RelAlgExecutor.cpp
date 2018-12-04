@@ -1358,6 +1358,7 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
       ra_exe_unit.scan_limit = filter_count_all;
     }
   }
+  executor_->is_filter_counted=true; //SUNNY
 
   static const size_t big_group_threshold{20000};
 
@@ -1401,6 +1402,7 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
     cat_.get_dataMgr().cudaMgr_->s_info_.freeStreamInfo();
   }
 
+  executor_->is_filter_counted=false;  //SUNNY
   result.setQueueTime(queue_time_ms);
   if (!error_code) {
     return result;

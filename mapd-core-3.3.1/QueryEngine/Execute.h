@@ -1371,6 +1371,8 @@ public:
   std::unique_ptr<PlanState> plan_state_;
   std::shared_ptr<RowSetMemoryOwner> row_set_mem_owner_;
 
+  bool is_filter_counted{false};  //SUNNY: Flag for FilterCountAll()
+
   bool is_nested_;
 
   static const int max_gpu_count{16};

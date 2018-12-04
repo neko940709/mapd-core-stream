@@ -792,7 +792,7 @@ void Executor::ExecutionDispatch::run(const ExecutorDeviceType chosen_device_typ
                                       const size_t ctx_idx,
                                       const int64_t rowid_lookup_key) noexcept {
   try {
-      if(g_enable_streaming && ra_exe_unit_.scan_limit){
+      if(g_enable_streaming && executor_->is_filter_counted){
           runImplWithStream(chosen_device_type, chosen_device_id, options, frag_ids, ctx_idx, rowid_lookup_key);
       } else{
           runImpl(chosen_device_type, chosen_device_id, options, frag_ids, ctx_idx, rowid_lookup_key);
