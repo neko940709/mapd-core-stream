@@ -285,7 +285,7 @@ CUstream* StreamInfo::get_stream_from_td(const std::thread::id td_id) {
 }
 
 void StreamInfo::freeStreamInfo() {
-    if(nItems_>0){
+    if(flag_){
         for(int i=0;i<nItems_;++i){
             cuStreamDestroy(streams_[i]);
             cuEventDestroy(events_[i]);
