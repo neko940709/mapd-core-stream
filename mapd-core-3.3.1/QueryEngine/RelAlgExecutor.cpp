@@ -1385,6 +1385,7 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
   } catch (const CardinalityEstimationRequired&) {
     max_groups_buffer_entry_guess =
         2 * std::min(groups_approx_upper_bound(table_infos), getNDVEstimation(work_unit, is_agg, co, eo));
+    cat_.get_dataMgr().cudaMgr_->s_info_.freeStreamInfo();
     CHECK_GT(max_groups_buffer_entry_guess, size_t(0));
     result = {executor_->executeWorkUnit(
                   &error_code,
