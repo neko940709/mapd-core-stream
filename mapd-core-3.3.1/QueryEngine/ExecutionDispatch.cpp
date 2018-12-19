@@ -566,6 +566,14 @@ void Executor::ExecutionDispatch::SingleStream(const ExecutorDeviceType chosen_d
       all_fragment_results_.emplace_back(std::move(device_results), outer_tab_frag_ids);
     }
   }
+  //SUNNY: Time to notify the blocked threads
+  {
+    cat_.get_dataMgr().deleteInterRes(std::this_thread::get_id(),chosen_device_id);
+
+    std::lock_guard<std::mutex> sm_lock(cudaMgr->s_info_._sm_mutex);
+    cudaMgr->s_info_.isEnoughMem=true;
+    cudaMgr->s_info_._condvar.notify_one();
+  }
 }
 
 

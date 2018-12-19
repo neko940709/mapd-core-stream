@@ -146,6 +146,8 @@ class GlobalFileMgr : public AbstractBufferMgr {  // implements
   void setTableEpoch(const int db_id, const int tb_id, const int start_epoch);
   size_t getTableEpoch(const int db_id, const int tb_id);
 
+  void deleteInterRes(const std::thread::id){};
+
  private:
   std::string basePath_;       /// The OS file system path containing the files.
   size_t num_reader_threads_;  /// number of threads used when loading data

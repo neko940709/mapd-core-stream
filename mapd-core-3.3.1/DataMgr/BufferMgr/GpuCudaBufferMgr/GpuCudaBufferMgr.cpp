@@ -18,6 +18,7 @@
 #include "GpuCudaBuffer.h"
 #include "../../../CudaMgr/CudaMgr.h"
 #include <glog/logging.h>
+#include <QueryEngine/Execute.h>
 //#include "../CudaUtils.h"
 
 namespace Buffer_Namespace {
@@ -39,8 +40,20 @@ void GpuCudaBufferMgr::addSlab(const size_t slabSize) {
   try {
     slabs_.back() = cudaMgr_->allocateDeviceMem(slabSize, deviceId_);
   } catch (std::runtime_error& error) {
-    slabs_.resize(slabs_.size() - 1);
-    throw FailedToCreateSlab();
+    //SUNNY: Threads wait until have enough mem
+    cudaMgr_->s_info_.isEnoughMem=false;
+    if(g_enable_streaming && cudaMgr_->s_info_.flag_){
+      while(true){
+        std::unique_lock<std::mutex> sm_lock(cudaMgr_->s_info_._sm_mutex);
+        cudaMgr_->s_info_._condvar.wait(sm_lock,[this]{return cudaMgr_->s_info_.isEnoughMem;});
+        slabs_.back() = cudaMgr_->allocateDeviceMem(slabSize, deviceId_);
+        sm_lock.unlock();
+        break;
+      }
+    } else{
+      slabs_.resize(slabs_.size() - 1);
+      throw FailedToCreateSlab();
+    }
   }
   slabSegments_.resize(slabSegments_.size() + 1);
   slabSegments_[slabSegments_.size() - 1].push_back(BufferSeg(0, slabSize / pageSize_));

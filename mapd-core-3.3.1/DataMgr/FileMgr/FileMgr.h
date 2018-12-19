@@ -201,6 +201,8 @@ class FileMgr : public AbstractBufferMgr {  // implements
 
   FILE* getFileForFileId(const int fileId);
 
+  void deleteInterRes(const std::thread::id){};
+
   inline size_t getNumChunks() {
     // @todo should be locked - but this is more for testing now
     return chunkIndex_.size();

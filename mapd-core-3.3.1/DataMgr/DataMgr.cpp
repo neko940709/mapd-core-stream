@@ -346,6 +346,10 @@ void DataMgr::deleteChunksWithPrefix(const ChunkKey& keyPrefix, const MemoryLeve
   }
 }
 
+void DataMgr::deleteInterRes(const std::thread::id id, const int deviceId){
+  bufferMgrs_[GPU_LEVEL][deviceId]->deleteInterRes(id);
+}
+
 std::shared_ptr<mapd_shared_mutex> DataMgr::getMutexForChunkPrefix(const ChunkKey& keyPrefix) {
   std::map<ChunkKey, std::shared_ptr<mapd_shared_mutex>>::iterator mapMutexIt = chunkMutexMap_.find(keyPrefix);
   if (mapMutexIt == chunkMutexMap_.end()) {

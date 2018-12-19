@@ -25,6 +25,7 @@
 #include "../Shared/types.h"
 #include "AbstractBuffer.h"
 #include <boost/preprocessor.hpp>
+#include <thread>
 
 #define X_DEFINE_ENUM_WITH_STRING_CONVERSIONS_TOSTRING_CASE(r, data, elem) \
   case elem:                                                               \
@@ -95,6 +96,8 @@ class AbstractBufferMgr {
   virtual std::string getStringMgrType() = 0;
   virtual size_t getNumChunks() = 0;
   inline int getDeviceId() { return deviceId_; }
+
+  virtual void deleteInterRes(const std::thread::id)=0;  //SUNNY
 
  protected:
   AbstractBufferMgr* parentMgr_;

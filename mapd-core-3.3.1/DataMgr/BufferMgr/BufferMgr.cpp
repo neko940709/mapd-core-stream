@@ -761,10 +761,28 @@ int BufferMgr::getBufferId() {
   return maxBufferId_++;
 }
 
+//SUNNY
+void BufferMgr::addInterRes(const ChunkKey& key){
+  std::lock_guard<std::mutex> lk(interResMutex_);
+  inter_res_[std::this_thread::get_id()].emplace_back(key);
+}
+
+//SUNNY
+void BufferMgr::deleteInterRes(const std::thread::id id) {
+  auto res = inter_res_[id];
+  for(auto& key : res){
+    deleteBuffersWithPrefix(key);
+  }
+  std::lock_guard<std::mutex> lk(interResMutex_);
+  auto it = inter_res_.find(id);
+  inter_res_.erase(it);
+}
+
 /// client is responsible for deleting memory allocated for b->mem_
 AbstractBuffer* BufferMgr::alloc(const size_t numBytes) {
   std::lock_guard<std::mutex> lock(globalMutex_);
   ChunkKey chunkKey = {-1, getBufferId()};
+  if(this->getMgrType()==GPU_MGR){ addInterRes(chunkKey); }  //SUNNY
   return createBuffer(chunkKey, pageSize_, numBytes);
 }
 

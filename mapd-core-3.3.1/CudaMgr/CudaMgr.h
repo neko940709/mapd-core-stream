@@ -20,6 +20,8 @@
 #include <cstdlib>
 #include <vector>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
 #include <map>
 #ifdef HAVE_CUDA
 #include <cuda.h>
@@ -55,11 +57,15 @@ public:
     CUevent* events_;
     std::map<std::thread::id,int> td_to_sm_;
 
-    int nItems_;
+    int nItems_{0};
     bool flag_{false};
 
     CUstream* get_stream_from_td(const std::thread::id td_id);
     void freeStreamInfo();
+
+    std::condition_variable _condvar;
+    std::mutex _sm_mutex;
+    bool isEnoughMem{false};
 };
 
 

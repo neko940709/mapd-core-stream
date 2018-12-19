@@ -26,6 +26,7 @@
 #define DATAMGR_MEMORY_BUFFER_BUFFERMGR_H
 
 #include <iostream>
+#include <thread>
 #include <map>
 #include <list>
 #include "../AbstractBuffer.h"
@@ -135,6 +136,10 @@ class BufferMgr : public AbstractBufferMgr {  // implements
   virtual void getChunkMetadataVecForKeyPrefix(std::vector<std::pair<ChunkKey, ChunkMetadata>>& chunkMetadataVec,
                                                const ChunkKey& keyPrefix);
 
+  //SUNNY
+  virtual void addInterRes(const ChunkKey& key);
+  virtual void deleteInterRes(const std::thread::id);
+
  protected:
   std::vector<int8_t*> slabs_;  /// vector of beginning memory addresses for each allocation of the buffer pool
   std::vector<BufferList> slabSegments_;
@@ -177,6 +182,11 @@ class BufferMgr : public AbstractBufferMgr {  // implements
 
   BufferList::iterator evict(BufferList::iterator& evictStart, const size_t numPagesRequested, const int slabNum);
   BufferList::iterator findFreeBuffer(size_t numBytes);
+
+  //SUNNY
+  std::map<std::thread::id,std::vector<std::vector<int>>> inter_res_;  //Mapping between threads and ChunkKeys of
+                                                                        // intermediate results
+  std::mutex interResMutex_;
 
   /**
    * @brief Gets a buffer of required size and returns an iterator to it
