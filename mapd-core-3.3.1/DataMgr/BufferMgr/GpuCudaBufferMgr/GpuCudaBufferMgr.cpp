@@ -42,7 +42,7 @@ void GpuCudaBufferMgr::addSlab(const size_t slabSize) {
   } catch (std::runtime_error& error) {
     //SUNNY: Threads wait until have enough mem
     cudaMgr_->s_info_.isEnoughMem=false;
-    if(g_enable_streaming && cudaMgr_->s_info_.flag_){
+    if(cudaMgr_->s_info_.flag_){
       while(true){
         std::unique_lock<std::mutex> sm_lock(cudaMgr_->s_info_._sm_mutex);
         cudaMgr_->s_info_._condvar.wait(sm_lock,[this]{return cudaMgr_->s_info_.isEnoughMem;});
