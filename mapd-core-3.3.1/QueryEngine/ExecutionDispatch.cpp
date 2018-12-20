@@ -387,6 +387,7 @@ void Executor::ExecutionDispatch::SingleStream(const ExecutorDeviceType chosen_d
                                               const std::vector<size_t>& local_col_to_frag_pos,
                                               const std::vector<size_t> &cartesianItem,
                                               int s_n){
+  LOG(INFO) << "Stream " << s_n << "start. " ;
   auto& cudaMgr = cat_.get_dataMgr().cudaMgr_;
   cudaMgr->setContext(chosen_device_id);  //SUNNY: for stream using
 
@@ -568,8 +569,9 @@ void Executor::ExecutionDispatch::SingleStream(const ExecutorDeviceType chosen_d
   }
   //SUNNY: Time to notify the blocked threads
   {
+    LOG(INFO) << "Start delete data of stream " << s_n << ". " ;
     cat_.get_dataMgr().deleteInterRes(std::this_thread::get_id(),chosen_device_id);
-
+    LOG(INFO) << "Data of stream " << s_n << " is deleted." ;
     std::lock_guard<std::mutex> sm_lock(cudaMgr->s_info_._sm_mutex);
     cudaMgr->s_info_.isEnoughMem=true;
     cudaMgr->s_info_._condvar.notify_one();
