@@ -1894,7 +1894,7 @@ std::vector<size_t> get_node_input_permutation(const std::vector<InputTableInfo>
 
 }  // namespace
 
-RelAlgExecutor::WorkUnit RelAlgExecutor::createCompoundWorkUnit(const RelCompound* compound,
+RelAlgExecutor::WorkUnit RelAlgExecutor:: (const RelCompound* compound,
                                                                 const SortInfo& sort_info,
                                                                 const bool just_explain) {
   std::vector<InputDescriptor> input_descs;

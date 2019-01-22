@@ -919,6 +919,7 @@ ResultPtr Executor::executeWorkUnit(int32_t* error_code,
       return std::make_shared<ResultSet>(
           std::vector<TargetInfo>{}, ExecutorDeviceType::CPU, QueryMemoryDescriptor{}, nullptr, this);
     }
+
     if (is_agg) {
       try {
         return collectAllDeviceResults(execution_dispatch, ra_exe_unit.target_exprs, query_mem_desc, row_set_mem_owner);

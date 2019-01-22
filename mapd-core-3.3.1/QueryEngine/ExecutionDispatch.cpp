@@ -150,8 +150,10 @@ const int8_t* Executor::ExecutionDispatch::getColumn(const ResultPtr& buffer,
     }
     auto& frag_id_to_result = columnarized_table_cache_[table_id];
     if (frag_id_to_result.empty() || !frag_id_to_result.count(frag_id)) {
+      LOG(INFO) << "getColumn: start columnarize.";
       frag_id_to_result.insert(std::make_pair(
           frag_id, std::unique_ptr<const ColumnarResults>(columnarize_result(row_set_mem_owner_, buffer, frag_id))));
+      LOG(INFO) << "getColumn: end columnarize.";
     }
     CHECK_NE(size_t(0), columnarized_table_cache_.count(table_id));
     result = columnarized_table_cache_[table_id][frag_id].get();
@@ -225,6 +227,8 @@ void Executor::ExecutionDispatch::runImpl(const ExecutorDeviceType chosen_device
       const auto& fragments = query_infos_[extra_tab_base + tab_idx].info.fragments;
       all_tables_fragments.insert(std::make_pair(table_id, &fragments));
     }
+    clock_t startT,endT;
+    startT=clock();
     fetch_result = executor_->fetchChunks(*this,
                                           ra_exe_unit_,
                                           chosen_device_id,
@@ -234,6 +238,8 @@ void Executor::ExecutionDispatch::runImpl(const ExecutorDeviceType chosen_device
                                           cat_,
                                           *chunk_iterators_ptr,
                                           chunks);
+    endT=clock();
+    LOG(INFO) << "MapD data fetch: " << (double)(endT-startT)/CLOCKS_PER_SEC << "s" ;
     if (fetch_result.num_rows.empty()) {
       return;
     }
@@ -983,9 +989,11 @@ const int8_t* Executor::ExecutionDispatch::getColumn(
     }
     auto& frag_id_to_iters = columnarized_table_cache_[iter_table_id];
     if (frag_id_to_iters.empty() || !frag_id_to_iters.count(frag_id)) {
+      LOG(INFO) << "getColumn: start columnarize.";
       frag_id_to_iters.insert(std::make_pair(
           frag_id,
           std::unique_ptr<const ColumnarResults>(columnarize_result(row_set_mem_owner_, iter_buffer, frag_id))));
+      LOG(INFO) << "getColumn: end columnarize.";
     }
 
     if (columnarized_ref_table_cache_.empty() || !columnarized_ref_table_cache_.count(iter_desc)) {
@@ -1002,9 +1010,11 @@ const int8_t* Executor::ExecutionDispatch::getColumn(
       }
       auto& frag_id_to_ref = columnarized_table_cache_[ref_table_id];
       if (frag_id_to_ref.empty() || !frag_id_to_ref.count(ref_frag_id)) {
+        LOG(INFO) << "getColumn: start columnarize.";
         frag_id_to_ref.insert(std::make_pair(
             ref_frag_id,
             std::unique_ptr<const ColumnarResults>(columnarize_result(row_set_mem_owner_, ref_buffer, ref_frag_id))));
+        LOG(INFO) << "getColumn: end columnarize.";
       }
       sub_key = {frag_id};
       if (frag_id_to_result.empty() || !frag_id_to_result.count(sub_key)) {
@@ -1168,10 +1178,12 @@ std::pair<const int8_t*, size_t> Executor::ExecutionDispatch::getColumnFragment(
     const auto frag_id = fragment.fragmentId;
     auto frag_it = frags_owner.find(frag_id);
     if (frag_it == frags_owner.end()) {
+      LOG(INFO) << "getColumnFragment: start columnarize.";
       std::shared_ptr<const ColumnarResults> col_frag(
           columnarize_result(executor->row_set_mem_owner_,
                              get_temporary_table(executor->temporary_tables_, hash_col.get_table_id()),
                              frag_id));
+      LOG(INFO) << "getColumnFragment: end columnarize.";
       auto res = frags_owner.insert(std::make_pair(frag_id, col_frag));
       CHECK(res.second);
       frag_it = res.first;

@@ -62,6 +62,7 @@
 #include <unistd.h>
 #include <unordered_map>
 #include <unordered_set>
+#include <time.h>
 
 extern bool g_enable_watchdog;
 extern bool g_enable_dynamic_watchdog;
@@ -219,6 +220,7 @@ inline std::vector<Analyzer::Expr*> get_exprs_not_owned(const std::vector<std::s
 inline const ColumnarResults* columnarize_result(std::shared_ptr<RowSetMemoryOwner> row_set_mem_owner,
                                                  const ResultPtr& result,
                                                  const int frag_id) {
+  LOG(INFO) << "Start columnarize.";
   if (const auto rows = boost::get<RowSetPtr>(&result)) {
     CHECK_EQ(0, frag_id);
     return rows_to_columnar_results(row_set_mem_owner, *rows, (*rows)->colCount());
